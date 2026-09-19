@@ -2,23 +2,23 @@
 #define STRUCT_H
 
 typedef struct  {
-    short lines, columns, steps, threads, threshold;
+    short rows, columns, steps, threads, threshold;
     unsigned seed;
 } Simulation;
 
 // Line is North-South (-1, 1) and Column is Weast-East(-1,1)
 typedef struct {
-    short lineDirection;
+    short rowDirection;
     short columnDirection;
     short speed;
 } Wind;
 
 typedef struct {
-    short lin, col;
+    short row, col;
 } FireZone;
 
 typedef struct {
-    short step, linX, colX, linY, colY; 
+    short step, rowX, colX, rowY, colY; 
 } ContainmentZone;
 
 typedef struct {
