@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include "structs.h"
+#include "simulation.h"
 
 void readInput(Simulation *s, Wind *w, FireZone *fires, ContainmentZone *containments) {
     s = (Simulation *) malloc(sizeof(Simulation));
@@ -15,7 +16,7 @@ void readInput(Simulation *s, Wind *w, FireZone *fires, ContainmentZone *contain
     scanf("%hd %hd %hd",
         &w->lineDirection, &w->columnDirection, &w->speed);
     
-    int N, M; // number of fire zones and contation zones
+    int N, M; // number of fire zones and containment zones
     scanf("%d %d", &N, &M);
 
     fires = (FireZone *) malloc(sizeof(FireZone)*N);
@@ -40,4 +41,7 @@ int main() {
     ContainmentZone *containments; 
 
     readInput(&s, &w, fires, containments);
+    simulate(s, w, fires, containments);
+
+    return EXIT_SUCCESS;
 }
