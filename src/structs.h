@@ -1,5 +1,9 @@
+#ifndef STRUCT_H
+#define STRUCT_H
+
 typedef struct  {
-    short lines, columns, steps, threads, seed, threshold;
+    short lines, columns, steps, threads, threshold;
+    unsigned seed;
 } Simulation;
 
 // Line is North-South (-1, 1) and Column is Weast-East(-1,1)
@@ -18,5 +22,7 @@ typedef struct {
 } ContainmentZone;
 
 typedef struct {
-    short cover, moisty, state, burningTime; 
+    short cover, humidity, state, burningTime; 
 } Cell;
+
+#endif /* STRUCT_H */
