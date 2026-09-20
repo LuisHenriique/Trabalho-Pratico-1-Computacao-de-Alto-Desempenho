@@ -10,23 +10,22 @@ void error() {
     exit(1);
 }
 
-void readInput(Simulation *s, Wind *w, FirePosArray **firesAddr, ContainmentZoneArray **containmentsAddr, Terrain **terrain) {
-
+void readInput(FILE *f, Simulation *s, Wind *w, FirePosArray **firesAddr, ContainmentZoneArray **containmentsAddr, Terrain **terrain) {
 	size_t terrain_rows, terrain_columns;
 
-    scanf("%hd %hd %hd %hd %u %hd",
+    fscanf(f, "%zu %zu %hd %hd %u %hd",
         &terrain_rows, &terrain_columns, &s->steps, &s->threads, &s->seed, &s->threshold);
-    scanf("%hd %hd %hd",
+    fscanf(f, "%hd %hd %hd",
         &w->rowDirection, &w->columnDirection, &w->speed);
 
 
-	*terrain = (Terrain *) malloc(sizeof(Terrain)+terrain_rows*terrain_columns*sizeof(Cell));
+	*terrain = (Terrain *) malloc(sizeof(Terrain) + terrain_rows*terrain_columns*sizeof(Cell));
 	assert(terrain);
 	(*terrain)->rows = terrain_rows;
 	(*terrain)->columns = terrain_columns;
 
-    int N, M; // number of fire zones and containment zones
-    scanf("%d %d", &N, &M);
+    size_t N, M; // Number of fire zones and containment zones
+    fscanf(f, "%zu %zu", &N, &M);
     
     if(N < 0 || M < 0) 
         error();
@@ -39,15 +38,17 @@ void readInput(Simulation *s, Wind *w, FirePosArray **firesAddr, ContainmentZone
 
 	FirePosArray *fires = *firesAddr;
 	ContainmentZoneArray *containments = *containmentsAddr;
+    fires->count = N;
+    containments->count = M;
 
     for(int i = 0; i < N; i++) {
 		FirePos *curr_pos = &fires->data[i];
-        scanf("%hd %hd", &curr_pos->row, &curr_pos->col);
+        fscanf(f, "%hd %hd", &curr_pos->row, &curr_pos->col);
 	}	
 
     for(int i = 0; i < M; i++) {
 		ContainmentZone *curr_zone = &containments->data[i];
-        scanf("%hd %hd %hd %hd %hd", &curr_zone->step, &curr_zone->rowX, &curr_zone->colX,
+        fscanf(f, "%hd %hd %hd %hd %hd", &curr_zone->step, &curr_zone->rowX, &curr_zone->colX,
             						 &curr_zone->rowY, &curr_zone->colY);
 	}
 }
@@ -89,22 +90,33 @@ void validate(Simulation s, Wind w, FirePosArray *fires, ContainmentZoneArray *c
     }
 }
 
+int main(int argc, char *argv[]) {
+    if(argc != 2) error();
 
-int main() {
-    Simulation s;
-    Wind w;
+    FILE *f = fopen(argv[1], "r");
+    if(!f) error();
+
+    Simulation sim;
+    Wind wind;
     FirePosArray *fires;
     ContainmentZoneArray *containments; 
 	Terrain *t;
 	int *containmentMap;
 
-    readInput(&s, &w, &fires, &containments, &t);
-	validate(s,w,fires,containments, t);
-	generateTerrainMatrix(t, &s.seed);
+    readInput(f, &sim, &wind, &fires, &containments, &t);
+    fclose(f);
+
+    generateTerrainMatrix(t, &sim.seed);
+	validate(sim, wind, fires, containments, t);
 	startFire(t, fires);
 	containmentMap = createContainmentMap(containments, t->rows, t->columns);
 
-	simulate(t, containmentMap, s, w);
+	simulate(t, containmentMap, sim, wind);
+
+    free(containmentMap);
+    free(fires);
+    free(containments);
+    free(t);
 
     return EXIT_SUCCESS;
 }
