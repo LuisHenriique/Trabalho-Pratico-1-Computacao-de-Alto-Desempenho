@@ -78,4 +78,4 @@ static const int basicWeight[] = {
 void generateTerrainMatrix(Terrain *terrain, unsigned *seed);
 size_t getCellIndex(size_t nCollumns, size_t row, size_t column);
 
-#endif // TERRAIN_H
+#endif /* TERRAIN_H */

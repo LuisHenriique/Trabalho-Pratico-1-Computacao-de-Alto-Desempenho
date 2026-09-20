@@ -5,16 +5,14 @@
 short getCover(int rand_val)
 {
     for (int i = 0; i < N_COVERS; i++)
-        if (rand_val >= numberToCover[i].min_val && 
-            rand_val <= numberToCover[i].max_val)
+        if (rand_val >= numberToCover[i].min_val && rand_val <= numberToCover[i].max_val)
             return numberToCover[i].code;
     return -1;
 }
 
 void generateTerrainMatrix(Terrain *terrain, unsigned *seed)
 {
-    for(int i=0; i<terrain->rows*terrain->columns;i++)
-    {
+    for(int i = 0; i < (terrain->rows*terrain->columns); i++) {
         int rand_val = rand_r(seed) % 100;
         terrain->cells[i].cover = getCover(rand_val);
         // Check for -1
