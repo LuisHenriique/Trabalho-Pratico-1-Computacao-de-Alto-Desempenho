@@ -24,7 +24,7 @@ Cell *generateTerrainMatrix(Terrain *terrain, unsigned seed)
     }
 }
 
-Cell getCell(Terrain *t, size_t row, size_t column)
+size_t getCellIndex(size_t nCollumns, size_t row, size_t column)
 {
-	return t->cells[t->columns*row + column];
+	return nCollumns*row + column;
 }

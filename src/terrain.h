@@ -56,6 +56,11 @@ static const int initial_state[] = {
     [FOREST] = INTACT,
 };
 
+static const int initialBurnTime[] = {
+    [UNDERGROWTH] = 2,
+    [FOREST] = 4 
+};
+
 //void simulate(Simulation s, Wind w, FirePosArray *fires, ContainmentZoneArray *containments);
 Cell *generateTerrainMatrix(Terrain *terrain, unsigned seed);
-Cell getCell(Terrain *t, size_t row, size_t column);
+size_t getCellIndex(size_t nCollumns, size_t row, size_t column);

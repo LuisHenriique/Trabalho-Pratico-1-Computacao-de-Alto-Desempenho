@@ -67,7 +67,8 @@ void validate(Simulation s, Wind w, FirePosArray *fires, ContainmentZoneArray *c
         if(fires->data[i].row < 0 || fires->data[i].row > terrain->rows-1) error();
         if(fires->data[i].col < 0 || fires->data[i].col > terrain->columns-1) error();
 
-		if(getCell(terrain, fires->data[i].row, fires->data[i].col).state == 0) error();
+		size_t ci = getCellIndex(terrain->columns, fires->data[i].row, fires->data[i].col);
+		if(terrain->cells[ci].state == 0) error();
 
         for(int j = i+1; j < N; j++)
             if(fires->data[i].row == fires->data[j].row && fires->data[i].col == fires->data[j].col) error();
