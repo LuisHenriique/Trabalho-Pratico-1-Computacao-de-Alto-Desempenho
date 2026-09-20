@@ -14,7 +14,7 @@ void readInput(FILE *f, Simulation *s, Wind *w, FirePosArray **firesAddr, Contai
 	size_t terrain_rows, terrain_columns;
 
     fscanf(f, "%zu %zu %hd %hd %u %hd",
-        &terrain_rows, &terrain_columns, &s->steps, &s->threads, &s->seed, &s->threshold);
+        &terrain_rows, &terrain_columns, &s->stepsMax, &s->threads, &s->seed, &s->threshold);
     fscanf(f, "%hd %hd %hd",
         &w->rowDirection, &w->columnDirection, &w->speed);
 
@@ -55,7 +55,7 @@ void readInput(FILE *f, Simulation *s, Wind *w, FirePosArray **firesAddr, Contai
 
 void validate(Simulation s, Wind w, FirePosArray *fires, ContainmentZoneArray *containments, Terrain *terrain) {
     // Simulation
-    if(terrain->rows <= 0 || terrain->columns <= 0 || s.steps < 0 || s.threads <= 0 || s.threshold <= 0) error();
+    if(terrain->rows <= 0 || terrain->columns <= 0 || s.stepsMax < 0 || s.threads <= 0 || s.threshold <= 0) error();
 
     // Wind
     if(w.rowDirection < -1 || w.rowDirection > 1) error();
@@ -86,7 +86,7 @@ void validate(Simulation s, Wind w, FirePosArray *fires, ContainmentZoneArray *c
         
         if(containments->data[i].rowX > containments->data[i].rowY || containments->data[i].colX > containments->data[i].colY) error();
         
-        if(containments->data[i].step < 0 || containments->data[i].step >= s.steps) error();
+        if(containments->data[i].step < 0 || containments->data[i].step >= s.stepsMax) error();
     }
 }
 

@@ -4,7 +4,8 @@
 #include <stddef.h>
 
 typedef struct  {
-    short steps, threads, threshold;
+    short stepsMax, stepsTaken, threads, threshold;
+    int nCombustibles, mostIgntionVal, mostIgnitonStep, totalIgnitons;
     unsigned seed;
 } Simulation;
 
