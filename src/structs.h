@@ -1,8 +1,10 @@
 #ifndef STRUCT_H
 #define STRUCT_H
 
+#include <stddef.h>
+
 typedef struct  {
-    short rows, columns, steps, threads, threshold;
+    short steps, threads, threshold;
     unsigned seed;
 } Simulation;
 
@@ -15,14 +17,21 @@ typedef struct {
 
 typedef struct {
     short row, col;
-} FireZone;
+} FirePos;
 
 typedef struct {
     short step, rowX, colX, rowY, colY; 
 } ContainmentZone;
 
+
 typedef struct {
-    short cover, humidity, state, burningTime; 
-} Cell;
+    size_t count;
+    ContainmentZone data[];
+} ContainmentZoneArray;
+
+typedef struct {
+	size_t count;
+	FirePos data[];
+} FirePosArray;
 
 #endif /* STRUCT_H */

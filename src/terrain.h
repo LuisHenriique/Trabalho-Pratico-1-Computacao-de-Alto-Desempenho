@@ -25,6 +25,15 @@ typedef struct {
     char code;
 } NumberCoverMap;
 
+typedef struct {
+    short cover, humidity, state, burningTime; 
+} Cell;
+
+typedef struct {
+	size_t rows, columns;
+	Cell cells[];
+} Terrain;
+
 static const NumberCoverMap numberToCover[] = {
     /* min   max    code */
     {  0,     9,    WATER,  },
@@ -47,4 +56,6 @@ static const int initial_state[] = {
     [FOREST] = INTACT,
 };
 
-void simulate(Simulation s, Wind w, FireZone *fires, ContainmentZone *containments);
+//void simulate(Simulation s, Wind w, FirePosArray *fires, ContainmentZoneArray *containments);
+Cell *generateTerrainMatrix(Terrain *terrain, unsigned seed);
+Cell getCell(Terrain *t, size_t row, size_t column);

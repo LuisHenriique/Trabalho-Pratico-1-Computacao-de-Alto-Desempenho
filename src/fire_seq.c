@@ -2,45 +2,58 @@
 #include <stdlib.h>
 #include <assert.h>
 #include "structs.h"
-#include "simulation.h"
+#include "terrain.h"
 
 void error() {
     printf("Mensagem de erro\n");
     exit(1);
 }
 
-void readInput(Simulation *s, Wind *w, FireZone **fires, ContainmentZone **containments) {
+void readInput(Simulation *s, Wind *w, FirePosArray **firesAddr, ContainmentZoneArray **containmentsAddr, Terrain **terrain) {
 
-    scanf("%hd %hd %hd %hd %hd %hd",
-        &s->rows, &s->columns, &s->steps, &s->threads, &s->seed, &s->threshold);
+	size_t terrain_rows, terrain_columns;
+
+    scanf("%hd %hd %hd %hd %u %hd",
+        &terrain_rows, &terrain_columns, &s->steps, &s->threads, &s->seed, &s->threshold);
     scanf("%hd %hd %hd",
         &w->rowDirection, &w->columnDirection, &w->speed);
-    
+
+
+	*terrain = (Terrain *) malloc(sizeof(Terrain)+terrain_rows*terrain_columns*sizeof(Cell));
+	assert(terrain);
+	(*terrain)->rows = terrain_rows;
+	(*terrain)->columns = terrain_columns;
+
     int N, M; // number of fire zones and containment zones
     scanf("%d %d", &N, &M);
     
     if(N < 0 || M < 0) 
         error();
     
-    *fires = (FireZone *) malloc(sizeof(FireZone)*N);
-    assert(*fires);
+    *firesAddr = (FirePosArray *) malloc(sizeof(FirePosArray) + N*sizeof(FirePos));
+    assert(*firesAddr);
     
-    *containments = (ContainmentZone *) malloc(sizeof(ContainmentZone)*M);
-    assert(*containments);
+    *containmentsAddr = (ContainmentZoneArray *) malloc(sizeof(ContainmentZoneArray) + M*sizeof(ContainmentZone));
+    assert(*containmentsAddr);
 
-    for(int i = 0; i < N; i++) 
-        scanf("%hd %hd", &(*fires)[i].row, &(*fires)[i].col);
+	FirePosArray *fires = *firesAddr;
+	ContainmentZoneArray *containments = *containmentsAddr;
 
-    for(int i = 0; i < M; i++)
-        scanf("%hd %hd %hd %hd %hd", 
-            &(*containments)[i].step, 
-            &(*containments)[i].rowX, &(*containments)[i].colX,
-            &(*containments)[i].rowY, &(*containments)[i].colY);
+    for(int i = 0; i < N; i++) {
+		FirePos *curr_pos = &fires->data[i];
+        scanf("%hd %hd", &curr_pos->row, &curr_pos->col);
+	}	
+
+    for(int i = 0; i < M; i++) {
+		ContainmentZone *curr_zone = &containments->data[i];
+        scanf("%hd %hd %hd %hd %hd", &curr_zone->step, &curr_zone->rowX, &curr_zone->colX,
+            						 &curr_zone->rowY, &curr_zone->colY);
+	}
 }
 
-void validate(Simulation s, Wind w, FireZone *fires, ContainmentZone *containments, Cell **terrain) {
+void validate(Simulation s, Wind w, FirePosArray *fires, ContainmentZoneArray *containments, Terrain *terrain) {
     // Simulation
-    if(s.rows <= 0 || s.columns <= 0 || s.steps < 0 || s.threads <= 0 || s.threshold <= 0) error();
+    if(terrain->rows <= 0 || terrain->columns <= 0 || s.steps < 0 || s.threads <= 0 || s.threshold <= 0) error();
 
     // Wind
     if(w.rowDirection < -1 || w.rowDirection > 1) error();
@@ -49,28 +62,28 @@ void validate(Simulation s, Wind w, FireZone *fires, ContainmentZone *containmen
     if(w.speed < 0 || w.speed > 5) error();
 
     // Fires
-    size_t N = sizeof(fires) / sizeof(fires[0]);
+    size_t N = fires->count; 
     for(int i = 0; i < N; i++) {
-        if(fires[i].row < 0 || fires[i].row > s.rows-1) error();
-        if(fires[i].col < 0 || fires[i].col > s.columns-1) error();
+        if(fires->data[i].row < 0 || fires->data[i].row > terrain->rows-1) error();
+        if(fires->data[i].col < 0 || fires->data[i].col > terrain->columns-1) error();
 
-        if(terrain[fires[i].row][fires[i].col].state == 0) error();
+		if(getCell(terrain, fires->data[i].row, fires->data[i].col).state == 0) error();
 
         for(int j = i+1; j < N; j++)
-            if(fires[i].row == fires[j].row && fires[i].col == fires[j].col) error();
+            if(fires->data[i].row == fires->data[j].row && fires->data[i].col == fires->data[j].col) error();
     }
 
     // Containments
-    size_t M = sizeof(containments) / sizeof(containments[0]);
+    size_t M = containments->count;
     for(int i = 0; i < M; i++) {
-        if(containments[i].rowX < 0 || containments[i].rowX > s.rows-1) error();
-        if(containments[i].colX < 0 || containments[i].colX > s.columns-1) error();
-        if(containments[i].rowY < 0 || containments[i].rowY > s.rows-1) error();
-        if(containments[i].colY < 0 || containments[i].colY > s.columns-1) error();
+        if(containments->data[i].rowX < 0 || containments->data[i].rowX > terrain->rows-1) error();
+        if(containments->data[i].colX < 0 || containments->data[i].colX > terrain->columns-1) error();
+        if(containments->data[i].rowY < 0 || containments->data[i].rowY > terrain->rows-1) error();
+        if(containments->data[i].colY < 0 || containments->data[i].colY > terrain->columns-1) error();
         
-        if(containments[i].rowX > containments[i].rowY || containments[i].colX > containments[i].colY) error();
+        if(containments->data[i].rowX > containments->data[i].rowY || containments->data[i].colX > containments->data[i].colY) error();
         
-        if(containments[i].step < 0 || containments[i].step >= s.steps) error();
+        if(containments->data[i].step < 0 || containments->data[i].step >= s.steps) error();
     }
 }
 
@@ -78,11 +91,12 @@ void validate(Simulation s, Wind w, FireZone *fires, ContainmentZone *containmen
 int main() {
     Simulation s;
     Wind w;
-    FireZone *fires;
-    ContainmentZone *containments; 
+    FirePosArray *fires;
+    ContainmentZoneArray *containments; 
+	Terrain *terrain;
 
-    readInput(&s, &w, &fires, &containments);
-    simulate(s, w, fires, containments);
+    readInput(&s, &w, &fires, &containments, &terrain);
+	validate(s,w,fires,containments, terrain);
 
     return EXIT_SUCCESS;
 }
