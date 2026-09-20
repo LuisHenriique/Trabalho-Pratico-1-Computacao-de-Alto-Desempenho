@@ -2,7 +2,14 @@
 #include "terrain.h"
 #include "structs.h"
 #include <stdlib.h>
-#include <string.h>
+#include <string.h> 
+#include <assert.h>
+
+int max(int a, int b)
+{
+	if (a > b) return a;
+	return b;
+}
 
 void startFire(Terrain *t, FirePosArray *fires)
 {
@@ -39,4 +46,75 @@ int *createContainmentMap(ContainmentZoneArray *containments, size_t rows, size_
 	}
 
 	return containmentMap;
+}
+
+int ignitionPotential(Terrain *t, int index, Wind w)
+{
+	char directions[8][2] = {{-1,-1}, {-1,0}, {-1,1},
+							  {0, -1} 		    ,{0, 1},
+							  {1, -1}, {1, 0}, {1, 1}};
+
+	int row = index/t->rows;
+	int col = index - row*t->columns;
+
+	int totalWeight = 0;
+
+	for (int i=0; i<8; i++) {
+		int neighborRow = row + directions[i][0];
+		int neighborCol = col + directions[i][1];
+
+		if (neighborRow < 0 || neighborRow >= t->rows) continue;
+		if (neighborCol < 0 || neighborCol >= t->columns) continue;
+
+		int neighborIdx = neighborRow*t->columns+neighborCol;
+		Cell neighbor = t->cells[neighborIdx];
+		int prop_row = row - neighborRow;
+		int prop_column = col - neighborCol;
+
+		int weight = basicWeight[abs(prop_row)+abs(prop_column)];
+		int alignment = prop_row*w.rowDirection+prop_column*w.columnDirection;
+		weight = max(weight + alignment*w.speed, 1);
+
+		totalWeight += weight;
+	}
+
+	Cell targetCell = t->cells[row*t->columns+col];
+
+	return (totalWeight*cover_factor[targetCell.cover]*(100 - targetCell.humidity))/100;
+}
+
+int notBurning(Cell *cells, int nCells)
+{
+	for (int i=0; i<nCells; i++)
+		if (cells[i].state == ON_FIRE) return 0;
+	return 1;
+}
+
+int simulate(Terrain *t, int *containmentMap, Simulation sim, Wind wind)
+{
+	int nCells = t->rows*t->columns;
+
+	Cell *newCells = (Cell *) malloc(nCells*sizeof(Cell));
+	assert(newCells);
+
+	memcpy(newCells, t->cells, nCells*sizeof(Cell));
+
+	for(int step=0; step<sim.steps; step++) {
+		for(int i=0; i<t->columns * t->rows; i++) {
+			if(containmentMap[i] == step && newCells[i].state == INTACT)
+				newCells[i].state = CONTAINED;
+
+			if (newCells[i].state == INTACT && 
+				ignitionPotential(t, i, wind) > sim.threshold)
+			{
+				newCells[i].state = ON_FIRE;
+				newCells[i].burningTime = initialBurnTime[newCells[i].cover];
+			}
+		}
+
+		memcpy(t->cells, newCells, nCells*sizeof(Cell));
+		if(notBurning(t->cells, nCells)) break;
+	}
+
+	free(newCells);
 }

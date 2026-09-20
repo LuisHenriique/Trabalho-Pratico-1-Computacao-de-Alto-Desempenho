@@ -1,3 +1,6 @@
+#ifndef TERRAIN_H
+#define TERRAIN_H
+
 #include "structs.h"
 
 #define N_COVERS 4
@@ -15,9 +18,14 @@ typedef enum {
     INTACT,
     ON_FIRE,
     BURNT,
-    CONTENTION,
+    CONTAINED,
 } State;
 
+typedef enum {
+	SELF,
+	ORTHOGONAL,
+	DIAGONAL
+}Directions;
 
 typedef struct {
     int min_val;
@@ -61,6 +69,13 @@ static const int initialBurnTime[] = {
     [FOREST] = 4 
 };
 
+static const int basicWeight[] = {
+	[ORTHOGONAL] = 10,
+	[DIAGONAL] = 7,
+};
+
 //void simulate(Simulation s, Wind w, FirePosArray *fires, ContainmentZoneArray *containments);
-Cell *generateTerrainMatrix(Terrain *terrain, unsigned seed);
+void generateTerrainMatrix(Terrain *terrain, unsigned *seed);
 size_t getCellIndex(size_t nCollumns, size_t row, size_t column);
+
+#endif // TERRAIN_H

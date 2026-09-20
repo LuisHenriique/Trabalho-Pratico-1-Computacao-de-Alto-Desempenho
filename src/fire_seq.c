@@ -3,6 +3,7 @@
 #include <assert.h>
 #include "structs.h"
 #include "terrain.h"
+#include "simulation.h"
 
 void error() {
     printf("Mensagem de erro\n");
@@ -94,10 +95,16 @@ int main() {
     Wind w;
     FirePosArray *fires;
     ContainmentZoneArray *containments; 
-	Terrain *terrain;
+	Terrain *t;
+	int *containmentMap;
 
-    readInput(&s, &w, &fires, &containments, &terrain);
-	validate(s,w,fires,containments, terrain);
+    readInput(&s, &w, &fires, &containments, &t);
+	validate(s,w,fires,containments, t);
+	generateTerrainMatrix(t, &s.seed);
+	startFire(t, fires);
+	containmentMap = createContainmentMap(containments, t->rows, t->columns);
+
+	simulate(t, containmentMap, s, w);
 
     return EXIT_SUCCESS;
 }

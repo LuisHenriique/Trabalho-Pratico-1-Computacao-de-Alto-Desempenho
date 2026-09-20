@@ -11,15 +11,15 @@ short getCover(int rand_val)
     return -1;
 }
 
-Cell *generateTerrainMatrix(Terrain *terrain, unsigned seed)
+void generateTerrainMatrix(Terrain *terrain, unsigned *seed)
 {
     for(int i=0; i<terrain->rows*terrain->columns;i++)
     {
-        int rand_val = rand_r(&seed) % 100;
+        int rand_val = rand_r(seed) % 100;
         terrain->cells[i].cover = getCover(rand_val);
         // Check for -1
 
-        terrain->cells[i].humidity = rand_r(&seed) % 101;
+        terrain->cells[i].humidity = rand_r(seed) % 101;
         terrain->cells[i].state = initial_state[terrain->cells[i].cover];
     }
 }
