@@ -417,7 +417,7 @@ void simular(Configuracao *c, Estatisticas *s, Terreno *t)
 	int pegando_fogo = 0;
 	int ignicoes_passo = 0;
 	int continuar = 1;
-	#pragma omp parallel default(none) shared(continuar, passo, n_cells, t, c, s, pegando_fogo, ignicoes_passo)
+	#pragma omp parallel num_threads(c->threads) default(none) shared(continuar, passo, n_cells, t, c, s, pegando_fogo, ignicoes_passo)
 	while(passo < c->max_passos && continuar) {
 		#pragma omp for simd reduction(+:ignicoes_passo) reduction(max:pegando_fogo)
         for(long long i = 0; i < n_cells; i++) {
