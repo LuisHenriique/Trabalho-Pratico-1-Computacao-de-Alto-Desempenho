@@ -1,4 +1,2 @@
 all:
-	gcc src/*.c -g -o exec
-run:
-	./exec
+	gcc -o exec -g fire_seq.c -fopenmp
