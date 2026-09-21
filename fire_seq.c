@@ -4,7 +4,7 @@
 #include <string.h>
 #include <omp.h>
 
-#define IDX(l, c, max_c) ((l) * (max_c) + (c))
+#define IDX(l, c, max_c) (((long long)(l)) * (max_c) + (c))
 
 enum Cobertura {
     AGUA = 0,
@@ -106,15 +106,15 @@ void liberar_terreno(Terreno *t);
 void ler_entrada(FILE *fd, Configuracao *c, Terreno *t, PosicaoFogo **focos, ZonaContencao **contencoes);
 void validar_entrada(Configuracao *c, Terreno *t, PosicaoFogo *focos, ZonaContencao *contencoes);
 void validar_focos_iniciais(Terreno *t, PosicaoFogo *focos, int n_focos);
-void gerar_terreno(Terreno *t, unsigned *seed, int n_cells);
+void gerar_terreno(Terreno *t, unsigned *seed, long long n_cells);
 void iniciar_fogos(Terreno *t, PosicaoFogo *focos, int n_focos);
 void construir_contencao(Terreno *t, ZonaContencao *contencoes, int n_contencoes);
 int potencial_ignicao(Terreno *t, int linha, int coluna, Vento v);
-int contar_combustiveis(Terreno *t, int n_cells);
-void processar_celula(Terreno *t, Configuracao *c, int i, int passo, int *ignicoes_passo, int *pegando_fogo);
+int contar_combustiveis(Terreno *t, long long n_cells);
+void processar_celula(Terreno *t, Configuracao *c, long long i, int passo, int *ignicoes_passo, int *pegando_fogo);
 Terreno preparar_mundo(char *arquivo_entrada, Configuracao *c, Estatisticas *s);
 void simular(Configuracao *c, Estatisticas *s, Terreno *t);
-void imprimir_resultados(Terreno *t, Estatisticas *s, int n_cells);
+void imprimir_resultados(Terreno *t, Estatisticas *s, long long n_cells);
 
 /* ==========================================================================
  * Função Principal
@@ -131,7 +131,7 @@ int main(int argc, char *argv[])
 
     simular(&config, &stats, &mapa);
 
-    imprimir_resultados(&mapa, &stats, mapa.C * mapa.L);
+    imprimir_resultados(&mapa, &stats, (long long)mapa.C * mapa.L);
 
     liberar_terreno(&mapa);
 
@@ -149,7 +149,7 @@ void erro(char *str)
 
 void alocar_terreno(Terreno *t, int L, int C)
 {
-    int n_cells = L * C;
+    size_t n_cells = (size_t)L * C;
 
     t->cobertura = malloc(n_cells * sizeof(unsigned char));
     t->umidade = malloc(n_cells * sizeof(unsigned char));
@@ -237,7 +237,7 @@ void validar_entrada(Configuracao *c, Terreno *t, PosicaoFogo *focos, ZonaConten
 
 void validar_focos_iniciais(Terreno *t, PosicaoFogo *focos, int n_focos)
 {
-    int idx;
+    long long idx;
     for(int i = 0; i < n_focos; i++) {
         idx = IDX(focos[i].linha, focos[i].coluna, t->C);
         if(t->cobertura[idx] == AGUA || t->cobertura[idx] == SOLO_EXPOSTO)
@@ -245,9 +245,9 @@ void validar_focos_iniciais(Terreno *t, PosicaoFogo *focos, int n_focos)
     }
 }
 
-void gerar_terreno(Terreno *t, unsigned *seed, int n_cells)
+void gerar_terreno(Terreno *t, unsigned *seed, long long n_cells)
 {
-    for(int i = 0; i < n_cells; i++) {
+    for(long long i = 0; i < n_cells; i++) {
         int rand_val = rand_r(seed) % 100;
         t->cobertura[i] = lut_cobertura[rand_val];
         t->umidade[i] = rand_r(seed) % 101;
@@ -257,7 +257,7 @@ void gerar_terreno(Terreno *t, unsigned *seed, int n_cells)
 
 void iniciar_fogos(Terreno *t, PosicaoFogo *focos, int n_focos)
 {
-    int j;
+    long long j;
     for(int i = 0; i < n_focos; i++) {
         j = IDX(focos[i].linha, focos[i].coluna, t->C);
         t->estado[j] = EM_CHAMAS;
@@ -267,10 +267,10 @@ void iniciar_fogos(Terreno *t, PosicaoFogo *focos, int n_focos)
 
 void construir_contencao(Terreno *t, ZonaContencao *contencoes, int n_contencoes)
 {
-    memset(t->ativacao, -1, sizeof(int) * t->C * t->L);
+    memset(t->ativacao, -1, sizeof(int) * (size_t)t->C * t->L);
 
     ZonaContencao zona;
-    int l;
+    long long l;
     for(int i = 0; i < n_contencoes; i++) {
         zona = contencoes[i];
         for(int j = zona.linha_ini; j <= zona.linha_fim; j++) {
@@ -313,14 +313,14 @@ int potencial_ignicao(Terreno *t, int linha, int coluna, Vento v)
         }
     }
 
-    int idx = IDX(linha, coluna, t->C);
+    long long idx = IDX(linha, coluna, t->C);
     return (peso_total * fator_combustivel[t->cobertura[idx]] * (100 - t->umidade[idx])) / 100;
 }
 
-int contar_combustiveis(Terreno *t, int n_cells)
+int contar_combustiveis(Terreno *t, long long n_cells)
 {
     int combustiveis = 0;
-    for(int i = 0; i < n_cells; i++)
+    for(long long i = 0; i < n_cells; i++)
         if(t->cobertura[i] == VEGETACAO_RASTEIRA || t->cobertura[i] == FLORESTA)
             combustiveis++;
     return combustiveis;
@@ -333,6 +333,8 @@ Terreno preparar_mundo(char *arquivo_entrada, Configuracao *c, Estatisticas *s)
     PosicaoFogo *focos;
     ZonaContencao *contencoes;
 
+    s->passo_mais_ignicoes = -1;
+
     if ((fd = fopen(arquivo_entrada, "r")) == NULL)
         erro("Arquivo não encontrado");
 
@@ -343,7 +345,7 @@ Terreno preparar_mundo(char *arquivo_entrada, Configuracao *c, Estatisticas *s)
 
     alocar_terreno(&t, t.L, t.C);
 
-    gerar_terreno(&t, &c->seed, t.L * t.C);
+    gerar_terreno(&t, &c->seed, (long long)t.L * t.C);
     validar_focos_iniciais(&t, focos, c->n_focos);
 
     iniciar_fogos(&t, focos, c->n_focos);
@@ -352,12 +354,12 @@ Terreno preparar_mundo(char *arquivo_entrada, Configuracao *c, Estatisticas *s)
     construir_contencao(&t, contencoes, c->n_contencoes);
     free(contencoes);
 
-    s->combustiveis = contar_combustiveis(&t, t.C * t.L);
+    s->combustiveis = contar_combustiveis(&t, (long long)t.C * t.L);
 
     return t;
 }
 
-void processar_celula(Terreno *t, Configuracao *c, int i, int passo, int *ignicoes_passo, int *pegando_fogo)
+void processar_celula(Terreno *t, Configuracao *c, long long i, int passo, int *ignicoes_passo, int *pegando_fogo)
 {
     t->proximo_estado[i] = t->estado[i];
     t->proximo_tempo[i] = t->tempo_atual[i];
@@ -385,15 +387,29 @@ void processar_celula(Terreno *t, Configuracao *c, int i, int passo, int *ignico
 
 void simular(Configuracao *c, Estatisticas *s, Terreno *t)
 {
-    int n_cells = t->C * t->L;
+    long long n_cells = (long long)t->C * t->L;
     double inicio = omp_get_wtime();
+
+    int tem_fogo = 0;
+    for (long long i = 0; i < n_cells; i++) {
+        if (t->estado[i] == EM_CHAMAS) {
+            tem_fogo = 1;
+            break;
+        }
+    }
+
+    if (!tem_fogo) {
+        s->passos = 0;
+        s->tempo_exec = omp_get_wtime() - inicio;
+        return;
+    }
 
     int passo;
     for (passo = 0; passo < c->max_passos; passo++) {
         int pegando_fogo = 0;
         int ignicoes_passo = 0;
 
-        for(int i = 0; i < n_cells; i++) {
+        for(long long i = 0; i < n_cells; i++) {
             processar_celula(t, c, i, passo, &ignicoes_passo, &pegando_fogo);
         }
 
@@ -421,11 +437,11 @@ void simular(Configuracao *c, Estatisticas *s, Terreno *t)
     s->tempo_exec = omp_get_wtime() - inicio;
 }
 
-void imprimir_resultados(Terreno *t, Estatisticas *s, int n_cells)
+void imprimir_resultados(Terreno *t, Estatisticas *s, long long n_cells)
 {
     int intactos = 0, em_chamas = 0, queimados = 0, contidos = 0, nao_combustiveis = 0;
 
-    for (int i = 0; i < n_cells; i++) {
+    for (long long i = 0; i < n_cells; i++) {
         switch (t->estado[i]) {
             case NAO_COMBUSTIVEL:  nao_combustiveis++;  break;
             case INTACTA:          intactos++;          break;
@@ -442,7 +458,7 @@ void imprimir_resultados(Terreno *t, Estatisticas *s, int n_cells)
     }
 
     unsigned long long checksum = 0;
-    for (int i = 0; i < n_cells; i++) {
+    for (long long i = 0; i < n_cells; i++) {
         checksum = checksum * 31ULL + (unsigned long long) t->estado[i];
         checksum = checksum * 31ULL + (unsigned long long) t->tempo_atual[i];
     }
