@@ -1,5 +1,6 @@
 exec
 fire_omp
+fire_omp_d
 fire_seq
 .vscode/*
 .vscode
