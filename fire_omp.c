@@ -413,33 +413,41 @@ void simular(Configuracao *c, Estatisticas *s, Terreno *t)
         return;
     }
 
-    int passo;
-	for(passo = 0; passo < c->max_passos; passo++) {
-		int pegando_fogo = 0;
-		int ignicoes_passo = 0;
-
+    int passo = 0;
+	int pegando_fogo = 0;
+	int ignicoes_passo = 0;
+	int continuar = 1;
+	#pragma omp parallel default(none) shared(continuar, passo, n_cells, t, c, s, pegando_fogo, ignicoes_passo)
+	while(passo < c->max_passos && continuar) {
+		#pragma omp for simd reduction(+:ignicoes_passo) reduction(max:pegando_fogo)
         for(long long i = 0; i < n_cells; i++) {
             processar_celula(t, c, i, passo, &ignicoes_passo, &pegando_fogo);
         }
 
-        s->ignicoes += ignicoes_passo;
-        if (ignicoes_passo > s->max_ignicoes) {
-            s->max_ignicoes = ignicoes_passo;
-            s->passo_mais_ignicoes = passo;
-		}
+		#pragma omp single
+		{
+			s->ignicoes += ignicoes_passo;
+			if (ignicoes_passo > s->max_ignicoes) {
+				s->max_ignicoes = ignicoes_passo;
+				s->passo_mais_ignicoes = passo;
+			}
 
-        unsigned char *temp_est = t->estado;
-        t->estado = t->proximo_estado;
-        t->proximo_estado = temp_est;
+			unsigned char *temp_est = t->estado;
+			t->estado = t->proximo_estado;
+			t->proximo_estado = temp_est;
 
-        unsigned char *temp_tmp = t->tempo_atual;
-        t->tempo_atual = t->proximo_tempo;
-        t->proximo_tempo = temp_tmp;
+			unsigned char *temp_tmp = t->tempo_atual;
+			t->tempo_atual = t->proximo_tempo;
+			t->proximo_tempo = temp_tmp;
 
-
-        if (!pegando_fogo) {
 			passo++;
-            break;
+
+			if (!pegando_fogo)
+				continuar = 0;
+			else {
+				pegando_fogo = 0;
+				ignicoes_passo = 0;
+			}
 		}
     }
 
