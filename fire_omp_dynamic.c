@@ -4,6 +4,11 @@
 #include <string.h>
 #include <omp.h>
 
+/* ==========================================================================
+ * Declarações de Estruturas Auxiliares
+ * ========================================================================== */
+
+// Converte linha e coluna em uma posição do vetor
 #define IDX(l, c, max_c) (((long long)(l)) * (max_c) + (c))
 
 enum Cobertura {
@@ -71,6 +76,7 @@ typedef struct {
     double tempo_exec;
 } Estatisticas;
 
+// Define quanto cada tipo de terreno ajuda o fogo a se espalhar
 static const int fator_combustivel[] = {
     [AGUA] = 0,
     [SOLO_EXPOSTO] = 0,
@@ -78,11 +84,13 @@ static const int fator_combustivel[] = {
     [FLORESTA] = 12
 };
 
+// Define por quantos passos cada tipo de vegetação queima
 static const unsigned char tempo_inicial[] = {
     [VEGETACAO_RASTEIRA] = 2,
     [FLORESTA] = 4
 };
 
+// Define o estado inicial de cada tipo de terreno
 static const unsigned char estado_inicial[] = {
     [AGUA] = NAO_COMBUSTIVEL,
     [SOLO_EXPOSTO] = NAO_COMBUSTIVEL,
@@ -143,6 +151,7 @@ void erro(const char *str)
     exit(1);
 }
 
+// Escolhe o tipo de terreno
 static inline unsigned char gerar_cobertura(int index) {
     if (index < 10)  return AGUA;
     if (index < 20)  return SOLO_EXPOSTO;
@@ -151,6 +160,7 @@ static inline unsigned char gerar_cobertura(int index) {
     return 0;
 }
 
+// Reserva os vetores usados pelo terreno a ser simulado
 void alocar_terreno(Terreno *t, int L, int C)
 {
     size_t n_cells = (size_t)L * C;
@@ -166,6 +176,7 @@ void alocar_terreno(Terreno *t, int L, int C)
     assert(t->cobertura && t->umidade && t->estado && t->tempo_atual && t->ativacao && t->proximo_estado && t->proximo_tempo);
 }
 
+// Libera os vetores do terreno
 void liberar_terreno(Terreno *t)
 {
     free(t->cobertura);
@@ -177,6 +188,7 @@ void liberar_terreno(Terreno *t)
     free(t->proximo_tempo);
 }
 
+// Lê as medidas, regras, focos e áreas de contenção a partir do arquivo de entrada
 void ler_entrada(FILE *fd, Configuracao *c, Terreno *t, PosicaoFogo **focos, ZonaContencao **contencoes)
 {
     fscanf(fd, "%d %d %d %d %u %d", &t->L, &t->C, &c->max_passos, &c->threads, &c->seed, &c->limiar);
@@ -199,6 +211,7 @@ void ler_entrada(FILE *fd, Configuracao *c, Terreno *t, PosicaoFogo **focos, Zon
     }
 }
 
+// Confere os limites e evita posições inválidas ou repetidas conforme especificado
 void validar_entrada(Configuracao *c, Terreno *t, PosicaoFogo *focos, ZonaContencao *contencoes)
 {
     if(t->L <= 0 || t->C <= 0 || c->max_passos < 0 || c->threads <= 0 || c->limiar <= 0)
@@ -239,6 +252,7 @@ void validar_entrada(Configuracao *c, Terreno *t, PosicaoFogo *focos, ZonaConten
     }
 }
 
+// Impede que um foco comece na água ou no solo exposto
 void validar_focos_iniciais(Terreno *t, PosicaoFogo *focos, int n_focos)
 {
     long long idx;
@@ -249,6 +263,7 @@ void validar_focos_iniciais(Terreno *t, PosicaoFogo *focos, int n_focos)
     }
 }
 
+// Gera a cobertura, a umidade e o estado inicial de cada célula
 void gerar_terreno(Terreno *t, unsigned *seed, long long n_cells)
 {
     for(long long i = 0; i < n_cells; i++) {
@@ -259,6 +274,7 @@ void gerar_terreno(Terreno *t, unsigned *seed, long long n_cells)
     }
 }
 
+// Acende os focos iniciais e marca seu tempo de queima
 void iniciar_fogos(Terreno *t, PosicaoFogo *focos, int n_focos)
 {
     long long j;
@@ -269,6 +285,7 @@ void iniciar_fogos(Terreno *t, PosicaoFogo *focos, int n_focos)
     }
 }
 
+// Guarda o primeiro passo de contenção previsto para cada célula
 void construir_contencao(Terreno *t, ZonaContencao *contencoes, int n_contencoes)
 {
     memset(t->ativacao, -1, sizeof(int) * (size_t)t->C * t->L);
@@ -287,6 +304,7 @@ void construir_contencao(Terreno *t, ZonaContencao *contencoes, int n_contencoes
     }
 }
 
+// Soma a força do fogo vizinho, levando em conta vento e distância
 int potencial_ignicao(Terreno *t, int linha, int coluna, Vento v)
 {
     int peso_total = 0;
@@ -317,10 +335,12 @@ int potencial_ignicao(Terreno *t, int linha, int coluna, Vento v)
         }
     }
 
+    // Ajusta a força pelo tipo de vegetação e pela umidade
     long long idx = IDX(linha, coluna, t->C);
     return (peso_total * fator_combustivel[t->cobertura[idx]] * (100 - t->umidade[idx])) / 100;
 }
 
+// Conta as células com vegetação, usadas nos percentuais finais
 int contar_combustiveis(Terreno *t, long long n_cells)
 {
     int combustiveis = 0;
@@ -330,6 +350,7 @@ int contar_combustiveis(Terreno *t, long long n_cells)
     return combustiveis;
 }
 
+// Lê a entrada e monta o terreno antes da simulação
 Terreno preparar_mundo(char *arquivo_entrada, Configuracao *c, Estatisticas *s)
 {
     FILE *fd;
@@ -363,16 +384,19 @@ Terreno preparar_mundo(char *arquivo_entrada, Configuracao *c, Estatisticas *s)
     return t;
 }
 
+// Calcula o próximo estado da célula sem mudar o estado atual
 void processar_celula(Terreno *t, Configuracao *c, long long i, int passo, int *ignicoes_passo, int *pegando_fogo)
 {
     t->proximo_estado[i] = t->estado[i];
     t->proximo_tempo[i] = t->tempo_atual[i];
 
+    // A contenção protege a célula intacta antes da possível ignição
     if (t->ativacao[i] == passo && t->estado[i] == INTACTA) {
         t->proximo_estado[i] = CONTENCAO;
         return;
     }
 
+    // Uma célula intacta pega fogo quando atinge o limite definido
     if (t->estado[i] == INTACTA && potencial_ignicao(t, i / t->C, i % t->C, c->vento) >= c->limiar) {
         t->proximo_estado[i] = EM_CHAMAS;
         t->proximo_tempo[i] = tempo_inicial[t->cobertura[i]];
@@ -380,6 +404,7 @@ void processar_celula(Terreno *t, Configuracao *c, long long i, int passo, int *
         *pegando_fogo = 1;
         (*ignicoes_passo)++;
     } else if (t->estado[i] == EM_CHAMAS) {
+        // O fogo dura até o tempo de queima chegar a zero
         if (t->tempo_atual[i] == 1) {
             t->proximo_estado[i] = QUEIMADA;
         } else {
@@ -389,7 +414,7 @@ void processar_celula(Terreno *t, Configuracao *c, long long i, int passo, int *
     }
 }
 
-/* Verdadeiro se existe pelo menos uma celula em chamas */
+// Verdadeiro se existe pelo menos uma celula em chamas 
 int verificar_fogo(unsigned char *estado, int n_cells)
 {
 	int tem_fogo = 0;
@@ -401,6 +426,7 @@ int verificar_fogo(unsigned char *estado, int n_cells)
 	return 0;
 }
 
+// Avança a simulação até acabar o fogo ou atingir o limite de passos
 void simular(Configuracao *c, Estatisticas *s, Terreno *t)
 {
     long long n_cells = (long long)t->C * t->L;
@@ -417,21 +443,27 @@ void simular(Configuracao *c, Estatisticas *s, Terreno *t)
 	int pegando_fogo = 0;
 	int ignicoes_passo = 0;
 	int continuar = 1;
+	// Mantém as threads ativas durante todos os passos
 	#pragma omp parallel num_threads(c->threads) default(none) shared(continuar, passo, n_cells, t, c, s, pegando_fogo, ignicoes_passo)
 	while(passo < c->max_passos && continuar) {
+		// Processa cada célula uma vez neste passo
+		// Distribui grupos de 512 células conforme as threads terminam
 		#pragma omp for simd schedule(dynamic, 512) reduction(+:ignicoes_passo) reduction(max:pegando_fogo)
         for(long long i = 0; i < n_cells; i++) {
             processar_celula(t, c, i, passo, &ignicoes_passo, &pegando_fogo);
         }
 
+		// Uma thread atualiza os dados comuns após todas terminarem
 		#pragma omp single
 		{
+			// Registra as novas ignições e o passo com o maior número delas
 			s->ignicoes += ignicoes_passo;
 			if (ignicoes_passo > s->max_ignicoes) {
 				s->max_ignicoes = ignicoes_passo;
 				s->passo_mais_ignicoes = passo;
 			}
 
+			// Troca os vetores atuais pelos vetores calculados neste passo
 			unsigned char *temp_est = t->estado;
 			t->estado = t->proximo_estado;
 			t->proximo_estado = temp_est;
@@ -455,6 +487,7 @@ void simular(Configuracao *c, Estatisticas *s, Terreno *t)
     s->tempo_exec = omp_get_wtime() - inicio;
 }
 
+// Conta os estados finais e mostra os dados da simulação
 void imprimir_resultados(Terreno *t, Estatisticas *s, long long n_cells)
 {
     int intactos = 0, em_chamas = 0, queimados = 0, contidos = 0, nao_combustiveis = 0;
@@ -475,6 +508,7 @@ void imprimir_resultados(Terreno *t, Estatisticas *s, long long n_cells)
         protegidos_porc = 100.0 * contidos / s->combustiveis;
     }
 
+    // Cria um valor para conferir se os resultados das versões coincidem
     unsigned long long checksum = 0;
     for (long long i = 0; i < n_cells; i++) {
         checksum = checksum * 31ULL + (unsigned long long) t->estado[i];
