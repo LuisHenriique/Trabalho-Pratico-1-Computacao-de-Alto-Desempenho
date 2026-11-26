@@ -179,9 +179,10 @@ void liberar_terreno(Terreno *t)
 
 void ler_entrada(FILE *fd, Configuracao *c, Terreno *t, PosicaoFogo **focos, ZonaContencao **contencoes)
 {
-    fscanf(fd, "%d %d %d %d %u %d", &t->L, &t->C, &c->max_passos, &c->threads, &c->seed, &c->limiar);
-    fscanf(fd, "%d %d %d", &c->vento.dir_linha, &c->vento.dir_coluna, &c->vento.intensidade);
-    fscanf(fd, "%d %d", &c->n_focos, &c->n_contencoes);
+    int lidos;
+    lidos = fscanf(fd, "%d %d %d %d %u %d", &t->L, &t->C, &c->max_passos, &c->threads, &c->seed, &c->limiar);
+    lidos = fscanf(fd, "%d %d %d", &c->vento.dir_linha, &c->vento.dir_coluna, &c->vento.intensidade);
+    lidos = fscanf(fd, "%d %d", &c->n_focos, &c->n_contencoes);
 
     if(c->n_focos < 0 || c->n_contencoes < 0)
         erro("Valor invalido na entrada!");
@@ -192,11 +193,12 @@ void ler_entrada(FILE *fd, Configuracao *c, Terreno *t, PosicaoFogo **focos, Zon
     assert(*contencoes);
 
     for(int i = 0; i < c->n_focos; i++)
-        fscanf(fd, "%d %d", &(*focos)[i].linha, &(*focos)[i].coluna);
+        lidos = fscanf(fd, "%d %d", &(*focos)[i].linha, &(*focos)[i].coluna);
     for(int i = 0; i < c->n_contencoes; i++) {
         ZonaContencao *z = &(*contencoes)[i];
-        fscanf(fd, "%d %d %d %d %d", &z->passo, &z->linha_ini, &z->coluna_ini, &z->linha_fim, &z->coluna_fim);
+        lidos = fscanf(fd, "%d %d %d %d %d", &z->passo, &z->linha_ini, &z->coluna_ini, &z->linha_fim, &z->coluna_fim);
     }
+    (void)lidos;
 }
 
 void validar_entrada(Configuracao *c, Terreno *t, PosicaoFogo *focos, ZonaContencao *contencoes)
@@ -392,7 +394,6 @@ void processar_celula(Terreno *t, Configuracao *c, long long i, int passo, int *
 /* Verdadeiro se existe pelo menos uma celula em chamas */
 int verificar_fogo(unsigned char *estado, int n_cells)
 {
-	int tem_fogo = 0;
     for (long long i = 0; i < n_cells; i++) {
         if (estado[i] == EM_CHAMAS) {
 			return 1;
