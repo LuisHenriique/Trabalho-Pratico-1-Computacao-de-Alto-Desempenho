@@ -5,6 +5,11 @@
 #include <omp.h>
 #include <mpi.h>
 
+/* ==========================================================================
+ * Declarações de Estruturas Auxiliares
+ * ========================================================================== */
+
+// Converte linha e coluna em uma posição do vetor
 #define IDX(l, c, max_c) (((long long)(l)) * (max_c) + (c))
 
 enum Cobertura {
@@ -73,6 +78,7 @@ typedef struct {
     double tempo_exec;
 } Estatisticas;
 
+// Define quanto cada tipo de terreno ajuda o fogo a se espalhar
 static const int fator_combustivel[] = {
     [AGUA] = 0,
     [SOLO_EXPOSTO] = 0,
@@ -80,11 +86,13 @@ static const int fator_combustivel[] = {
     [FLORESTA] = 12
 };
 
+// Define por quantos passos cada tipo de vegetação queima
 static const unsigned char tempo_inicial[] = {
     [VEGETACAO_RASTEIRA] = 2,
     [FLORESTA] = 4
 };
 
+// Define o estado inicial de cada tipo de terreno
 static const unsigned char estado_inicial[] = {
     [AGUA] = NAO_COMBUSTIVEL,
     [SOLO_EXPOSTO] = NAO_COMBUSTIVEL,
@@ -118,10 +126,7 @@ int verificar_fogo(unsigned char *celular, int n_cells);
 void simular(Configuracao *c, Estatisticas *s, Terreno *t, int rank, int size, int L_global);
 void imprimir_resultados(Terreno *t, Estatisticas *s, long long n_cells);
 
-/* ==========================================================================
- * Função Principal
- * ========================================================================== */
-
+// Função principal
 int main(int argc, char *argv[])
 {
     Terreno mapa = {0};
@@ -130,11 +135,13 @@ int main(int argc, char *argv[])
     int provided, rank, size;
     int params[8];
 
+    // Inicia o MPI e identifica o processo e o total de processos
     MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     int *sendcounts = NULL, *displs = NULL;
+    // O processo 0 lê a entrada e prepara a matriz completa
     if (rank == 0) {
         if (argc != 2) {
             fprintf(stderr, "Uso: mpirun -np <NPrc> ./fire_mpi_omp <arq_entrada>\n");
@@ -157,6 +164,7 @@ int main(int argc, char *argv[])
         alocar_linhas(mapa.L, mapa.C, size, sendcounts, displs);
     }
 
+    // Envia os parâmetros da simulação para todos os processos
     MPI_Bcast(params, 8, MPI_INT, 0, MPI_COMM_WORLD);
     if (rank != 0) {
         mapa.L = params[0];
@@ -169,6 +177,7 @@ int main(int argc, char *argv[])
         config.vento.dir_coluna = params[7];
     }
 
+    // Divide as linhas da matriz entre os processos
     int n_linhas_p = mapa.L / size + (rank < (mapa.L % size) ? 1 : 0);
     int elem_locais = n_linhas_p * mapa.C;
 
@@ -177,6 +186,7 @@ int main(int argc, char *argv[])
     mapa_local.C = mapa.C;
     aloca_arrays_locais(n_linhas_p, mapa.C, &mapa_local);
 
+    // Distribui os dados da matriz para as partes locais
     copia_array_local_ui(rank, elem_locais, sendcounts, displs, mapa.cobertura, mapa_local.cobertura);
     copia_array_local_ui(rank, elem_locais, sendcounts, displs, mapa.estado, &mapa_local.estado[mapa.C]);
     copia_array_local_ui(rank, elem_locais, sendcounts, displs, mapa.tempo_atual, mapa_local.tempo_atual);
@@ -194,7 +204,7 @@ int main(int argc, char *argv[])
 
     simular(&config, &stats, &mapa_local, rank, size, mapa.L);
 
-    // /* Consolidando os resultados */
+    // Reúne os estados e tempos finais no processo 0
     MPI_Gatherv(
         &mapa_local.estado[mapa.C], elem_locais, MPI_UNSIGNED_CHAR,
         rank == 0 ? mapa.estado : NULL, sendcounts, displs, MPI_UNSIGNED_CHAR,
@@ -218,15 +228,14 @@ int main(int argc, char *argv[])
     return 0;
 }
 
- /* ==========================================================================
- * Implementações
- * ========================================================================== */
+// Implementações das funções
 void erro(const char *str)
 {
     fprintf(stderr, "%s\n", str);
     MPI_Abort(MPI_COMM_WORLD, 1);
 }
 
+// Escolhe o tipo de terreno
 static inline unsigned char gerar_cobertura(int index) {
     if (index < 10)  return AGUA;
     if (index < 20)  return SOLO_EXPOSTO;
@@ -235,7 +244,8 @@ static inline unsigned char gerar_cobertura(int index) {
     return 0;
 }
 
-void alocar_linhas(int L, int C, int size, int *sendcounts, int *displs) 
+// Calcula a quantidade de células e o início da faixa de cada processo
+void alocar_linhas(int L, int C, int size, int *sendcounts, int *displs)
 {
     int offset = 0;
     for (int r = 0; r < size; r++) {
@@ -246,10 +256,11 @@ void alocar_linhas(int L, int C, int size, int *sendcounts, int *displs)
     }
 }
 
+// Reserva os vetores locais e as linhas extras de estado
 void aloca_arrays_locais(int n_linhas_p, int C, Terreno *local_mapa)
 {
     size_t n   = (size_t)n_linhas_p * C;
-    size_t n_h = (size_t)(n_linhas_p + 2) * C;     // com ghost rows
+    size_t n_h = (size_t)(n_linhas_p + 2) * C;
 
     local_mapa->estado         = calloc(n_h, sizeof(unsigned char));
     local_mapa->proximo_estado = calloc(n_h, sizeof(unsigned char));
@@ -264,6 +275,7 @@ void aloca_arrays_locais(int n_linhas_p, int C, Terreno *local_mapa)
            local_mapa->tempo_atual && local_mapa->proximo_tempo);
 }
 
+// Distribui as partes de um vetor de bytes entre os processos
 void copia_array_local_ui(int rank, int n_elementos, int *sendcounts, int *displs, unsigned char *array_global, unsigned char *array_local)
 {
     MPI_Scatterv(
@@ -279,6 +291,7 @@ void copia_array_local_ui(int rank, int n_elementos, int *sendcounts, int *displ
     );
 }
 
+// Reserva os vetores usados pelo terreno a ser simulado
 void alocar_terreno(Terreno *t, int L, int C)
 {
     size_t n_cells = (size_t)L * C;
@@ -294,6 +307,7 @@ void alocar_terreno(Terreno *t, int L, int C)
     assert(t->cobertura && t->umidade && t->estado && t->tempo_atual && t->ativacao && t->proximo_estado && t->proximo_tempo);
 }
 
+// Libera os vetores do terreno
 void liberar_terreno(Terreno *t)
 {
     free(t->cobertura);
@@ -305,6 +319,7 @@ void liberar_terreno(Terreno *t)
     free(t->proximo_tempo);
 }
 
+// Lê as medidas, regras, focos e áreas de contenção do arquivo
 void ler_entrada(FILE *fd, Configuracao *c, Terreno *t, PosicaoFogo **focos, ZonaContencao **contencoes)
 {
     int lidos;
@@ -329,6 +344,7 @@ void ler_entrada(FILE *fd, Configuracao *c, Terreno *t, PosicaoFogo **focos, Zon
     (void)lidos;
 }
 
+// Confere os limites e evita posições inválidas ou repetidas
 void validar_entrada(Configuracao *c, Terreno *t, PosicaoFogo *focos, ZonaContencao *contencoes)
 {
     if(t->L <= 0 || t->C <= 0 || c->max_passos < 0 || c->threads <= 0 || c->limiar <= 0)
@@ -369,6 +385,7 @@ void validar_entrada(Configuracao *c, Terreno *t, PosicaoFogo *focos, ZonaConten
     }
 }
 
+// Impede que um foco comece na água ou no solo exposto
 void validar_focos_iniciais(Terreno *t, PosicaoFogo *focos, int n_focos)
 {
     long long idx;
@@ -379,6 +396,7 @@ void validar_focos_iniciais(Terreno *t, PosicaoFogo *focos, int n_focos)
     }
 }
 
+// Gera a cobertura, a umidade e o estado inicial de cada célula
 void gerar_terreno(Terreno *t, unsigned *seed, long long n_cells)
 {
     for(long long i = 0; i < n_cells; i++) {
@@ -389,6 +407,7 @@ void gerar_terreno(Terreno *t, unsigned *seed, long long n_cells)
     }
 }
 
+// Acende os focos iniciais e marca seu tempo de queima
 void iniciar_fogos(Terreno *t, PosicaoFogo *focos, int n_focos)
 {
     long long j;
@@ -399,6 +418,7 @@ void iniciar_fogos(Terreno *t, PosicaoFogo *focos, int n_focos)
     }
 }
 
+// Guarda o primeiro passo de contenção previsto para cada célula
 void construir_contencao(Terreno *t, ZonaContencao *contencoes, int n_contencoes)
 {
     memset(t->ativacao, -1, sizeof(int) * (size_t)t->C * t->L);
@@ -417,6 +437,7 @@ void construir_contencao(Terreno *t, ZonaContencao *contencoes, int n_contencoes
     }
 }
 
+// Soma a força do fogo vizinho, levando em conta vento e distância
 int potencial_ignicao(Terreno *t, int linha, int coluna, Vento v)
 {
     int peso_total = 0;
@@ -442,10 +463,12 @@ int potencial_ignicao(Terreno *t, int linha, int coluna, Vento v)
         }
     }
 
+    // Ajusta a força pelo tipo de vegetação e pela umidade
     long long idx = IDX(linha, coluna, t->C);
     return (peso_total * fator_combustivel[t->cobertura[idx]] * (100 - t->umidade[idx])) / 100;
 }
 
+// Conta as células com vegetação, usadas nos percentuais finais
 int contar_combustiveis(Terreno *t, long long n_cells)
 {
     int combustiveis = 0;
@@ -455,6 +478,7 @@ int contar_combustiveis(Terreno *t, long long n_cells)
     return combustiveis;
 }
 
+// Lê a entrada e monta o terreno antes da simulação
 Terreno preparar_mundo(char *arquivo_entrada, Configuracao *c, Estatisticas *s)
 {
     FILE *fd;
@@ -488,16 +512,19 @@ Terreno preparar_mundo(char *arquivo_entrada, Configuracao *c, Estatisticas *s)
     return t;
 }
 
+// Calcula o próximo estado da célula sem mudar o estado atual
 void processar_celula(Terreno *t, Configuracao *c, long long i, int C, int passo, int *ignicoes_passo, int *pegando_fogo)
 {
     t->proximo_estado[i+C] = t->estado[i+C];
     t->proximo_tempo[i] = t->tempo_atual[i];
 
+    // A contenção protege a célula intacta antes da possível ignição
     if (t->ativacao[i] == passo && t->estado[i+C] == INTACTA) {
         t->proximo_estado[i+C] = CONTENCAO;
         return;
     }
 
+    // Uma célula intacta pega fogo quando atinge o limiar
     if (t->estado[i+C] == INTACTA && potencial_ignicao(t, i / t->C, i % t->C, c->vento) >= c->limiar) {
         t->proximo_estado[i+C] = EM_CHAMAS;
         t->proximo_tempo[i] = tempo_inicial[t->cobertura[i]];
@@ -505,6 +532,7 @@ void processar_celula(Terreno *t, Configuracao *c, long long i, int C, int passo
         *pegando_fogo = 1;
         (*ignicoes_passo)++;
     } else if (t->estado[i+C] == EM_CHAMAS) {
+        // O fogo dura até o tempo de queima chegar a zero
         if (t->tempo_atual[i] == 1) {
             t->proximo_estado[i+C] = QUEIMADA;
         } else {
@@ -514,7 +542,7 @@ void processar_celula(Terreno *t, Configuracao *c, long long i, int C, int passo
     }
 }
 
-/* Verdadeiro se existe pelo menos uma celula em chamas */
+// Verdadeiro se existe pelo menos uma celula em chamas
 int verificar_fogo(unsigned char *estado, int n_cells)
 {
     for (long long i = 0; i < n_cells; i++) {
@@ -525,26 +553,26 @@ int verificar_fogo(unsigned char *estado, int n_cells)
 	return 0;
 }
 
-static inline void trocar_halo(unsigned char *est, int C, int L,
-                               int viz_cima, int viz_baixo)
+// Troca as linhas de fronteira com os processos vizinhos
+static inline void trocar_halo(unsigned char *est, int C, int L, int viz_cima, int viz_baixo)
 {
-    // my first real row goes up, my bottom ghost row comes from below
     MPI_Sendrecv(&est[C],       C, MPI_UNSIGNED_CHAR, viz_cima,  0,
                  &est[(L+1)*C], C, MPI_UNSIGNED_CHAR, viz_baixo, 0,
                  MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    // my last real row goes down, my top ghost row comes from above
+
     MPI_Sendrecv(&est[L*C],     C, MPI_UNSIGNED_CHAR, viz_baixo, 1,
                  &est[0],       C, MPI_UNSIGNED_CHAR, viz_cima,  1,
                  MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 }
 
+// Avança a simulação até acabar o fogo ou atingir o limite de passos
 void simular(Configuracao *c, Estatisticas *s, Terreno *t, int rank, int size, int L_global)
 {
     const int C = t->C, L = t->L;
     const long long n_cells = (long long)C * L;
 
     int viz_cima = MPI_PROC_NULL, viz_baixo = MPI_PROC_NULL;
-    if (L > 0) {                                   // empty ranks talk to nobody
+    if (L > 0) {
         if (rank > 0)                         viz_cima  = rank - 1;
         if (rank < size - 1 && rank + 1 < L_global) viz_baixo = rank + 1;
     }
@@ -554,6 +582,7 @@ void simular(Configuracao *c, Estatisticas *s, Terreno *t, int rank, int size, i
 
     int fogo_local  = (L > 0) ? verificar_fogo(&t->estado[C], n_cells) : 0;
     int fogo_global = 0;
+    // Verifica se existe fogo em qualquer processo antes do primeiro passo
     MPI_Allreduce(&fogo_local, &fogo_global, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
 
     if (!fogo_global) {
@@ -569,27 +598,31 @@ void simular(Configuracao *c, Estatisticas *s, Terreno *t, int rank, int size, i
     int ignicoes_passo = 0;
     int continuar = 1;
 
+    // Mantém as threads ativas durante todos os passos
     #pragma omp parallel num_threads(c->threads) \
         shared(continuar, passo, n_cells, t, c, s, pegando_fogo, ignicoes_passo, C, L, viz_cima, viz_baixo)
     while (passo < c->max_passos && continuar) {
 
+        // Processa as células locais e reduz as ignições e a presença de fogo
         #pragma omp for simd schedule(static) reduction(+:ignicoes_passo) reduction(max:pegando_fogo)
         for (long long i = 0; i < n_cells; i++)
             processar_celula(t, c, i, C, passo, &ignicoes_passo, &pegando_fogo);
-        // implicit barrier: reductions are complete
 
+        // A thread principal combina os resultados e atualiza os dados comuns
         #pragma omp master
         {
             int loc[2] = { ignicoes_passo, pegando_fogo };
             int glob[2];
             MPI_Allreduce(loc, glob, 2, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
+            // Registra as novas ignições e o passo com o maior número delas
             s->ignicoes += glob[0];
             if (glob[0] > s->max_ignicoes) {
                 s->max_ignicoes = glob[0];
                 s->passo_mais_ignicoes = passo;
             }
 
+            // Troca os vetores atuais pelos calculados neste passo
             unsigned char *te = t->estado;      t->estado      = t->proximo_estado; t->proximo_estado = te;
             unsigned char *tt = t->tempo_atual; t->tempo_atual = t->proximo_tempo;  t->proximo_tempo  = tt;
 
@@ -600,13 +633,15 @@ void simular(Configuracao *c, Estatisticas *s, Terreno *t, int rank, int size, i
 
             trocar_halo(t->estado, C, L, viz_cima, viz_baixo);
         }
-        #pragma omp barrier   // everyone sees passo/continuar and the swapped pointers
+        // Aguarda a troca dos vetores e a atualização da condição de parada
+        #pragma omp barrier
     }
 
     s->passos = passo;
     s->tempo_exec = omp_get_wtime() - inicio;
 }
 
+// Conta os estados finais e mostra os dados da simulação
 void imprimir_resultados(Terreno *t, Estatisticas *s, long long n_cells)
 {
     int intactos = 0, em_chamas = 0, queimados = 0, contidos = 0, nao_combustiveis = 0;
@@ -627,6 +662,7 @@ void imprimir_resultados(Terreno *t, Estatisticas *s, long long n_cells)
         protegidos_porc = 100.0 * contidos / s->combustiveis;
     }
 
+    // Cria um valor para conferir se os resultados das versões coincidem
     unsigned long long checksum = 0;
     for (long long i = 0; i < n_cells; i++) {
         checksum = checksum * 31ULL + (unsigned long long) t->estado[i];
