@@ -126,7 +126,9 @@ int verificar_fogo(unsigned char *celular, int n_cells);
 void simular(Configuracao *c, Estatisticas *s, Terreno *t, int rank, int size, int L_global);
 void imprimir_resultados(Terreno *t, Estatisticas *s, long long n_cells);
 
-// Função principal
+/* ==========================================================================
+ * Função Principal
+ * ========================================================================== */
 int main(int argc, char *argv[])
 {
     Terreno mapa = {0};
@@ -228,7 +230,9 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-// Implementações das funções
+/* ==========================================================================
+ * Implementações
+ * ========================================================================== */
 void erro(const char *str)
 {
     fprintf(stderr, "%s\n", str);

@@ -2,35 +2,56 @@
 
 O projeto da solução híbrida **MPI + OpenMP** seguiu as quatro etapas da metodologia **PCAM** (*Partitioning, Communication, Agglomeration, Mapping*), visando maximizar a localidade espacial dos dados, minimizar a latência de rede entre nós e equilibrar a carga computacional entre núcleos.
 
+### Breve descrição do problema
+
+Diferentes células de uma área florestal precisam ser analisadas;
+Calcular a propagação do fogo com base nos vizinhos, no vento e nas características de cada célula;
+Determinar se cada célula permanece intacta, entra em chamas, continua queimando, fica queimada ou se torna contenção;
+Repetir a análise até o fogo acabar ou atingir o limite de passos;
+Calcular e imprimir as estatísticas e o checksum da configuração final.
+
 ---
 
 ### 1. Particionamento (*Partitioning*)
-O problema foi particionado sob a abordagem de **decomposição de domínio** (*domain decomposition*). A unidade atômica de computação é cada célula $(l, c)$ da grade bidimensional $L \times C$, cujo próximo estado depende apenas do seu estado atual, de propriedades locais estáticas (`cobertura`, `umidade`, `ativacao`) e dos estados de seus 8 vizinhos na **vizinhança de Moore** (raio 1), modulados pelo vetor global de vento.
 
-* **Particionamento de Dados e Tarefas:** Como os vetores de `cobertura`, `umidade` e `ativacao` são imutáveis após a inicialização (com exceção da consulta de ativação no passo $p$), o foco do particionamento recai sobre as matrizes dinâmicas de estado (`estado`, `proximo_estado`) e tempo de queima (`tempo_atual`, `proximo_tempo`).
-* **Granularidade Fina Inicial:** Conceitualmente, cada célula define uma tarefa independente dentro de um mesmo passo temporal $p$, garantindo ausência de dependências de escrita (*write-after-write*) graças à técnica de *double buffering* (`estado` $\rightarrow$ `proximo_estado`).
+O particionamento é **por dados**. A floresta é representada por uma matriz de $L \times C$, para cada uma das células da matriz, há uma tarefa de atualização  $(l, c)$ em cada passo $p$.
+
+Há uma única tarefa responsável pela **leitura e preparação** do terreno. Após a leitura, ela fornece para as outras tarefas: configuração inicial das células, focos de incêndio e programação das contenções às tarefas de atualização.
+
+As tarefas de **atualização das células** podem ser executadas em paralelo em um mesmo passo. Cada uma determina o próximo estado e o próximo tempo de queima de sua célula, considerando suas características, a contenção programada e, quando necessário, os estados dos oito vizinhos e o vento. Graças à técnica de *double buffering* (`estado` $\rightarrow$ `proximo_estado`), ada célula define uma tarefa independente dentro de um mesmo passo temporal $p$, garantindo ausência de dependências de escrita (*write-after-write*).
+
+Após as atualizações, há uma tarefa de **consolidação das informações do passo**, que depende dos resultados das tarefas por célula. Ela reúne as novas ignições e a informação de existência de fogo, atualiza as estatísticas de ignição e determina a continuidade da simulação. Assim, **as células de um mesmo passo podem ser atualizadas em paralelo, mas os passos possuem dependência entre si**.
+
+Há uma tarefa de **finalização e saída**, que depende da conclusão da simulação. Ela utiliza a configuração final e as estatísticas acumuladas para calcular as contagens finais, os percentuais e o *checksum* e imprimir os resultados.
 
 ---
 
-### 2. Comunicação (*Communication*)
-A análise das dependências de dados revelou dois padrões distintos de comunicação ao longo de cada passo temporal $p$:
 
-1. **Comunicação Local (Ponto a Ponto — *Halo Exchange*):**
-   Para atualizar uma célula $(l, c)$, é necessário ler os estados atuais das 8 células adjacentes. Quando o domínio é dividido entre processos distintos, células situadas nas fronteiras de uma partição necessitam de dados residentes nos processos vizinhos. Isso caracteriza uma comunicação local, restrita apenas às linhas de borda adjacentes.
-2. **Comunicação Global (Coletiva):**
-   * **Distribuição e Coleta Inicial/Final:** O processo mestre (`rank 0`) realiza a leitura do arquivo de entrada e a geração pseudoaleatória determinística (`rand_r`), difundindo os parâmetros escalares via `MPI_Bcast` e distribuindo as fatias da matriz via `MPI_Scatterv`. Ao término da simulação, os estados finais são reunidos via `MPI_Gatherv` para o cálculo do *checksum* sequencial.
-   * **Sincronização e Redução por Passo:** Ao final de cada passo $p$, todos os processos precisam somar as novas ignições locais (`ignicoes_passo`) e verificar se ainda há alguma célula em chamas (`pegando_fogo > 0`) em qualquer região da floresta para decidir a condição de parada. Isso é resolvido com uma única operação coletiva `MPI_Allreduce`.
+### 2. Comunicação (*Communication*)
+
+O fluxo de comunicações segue o grafo representado pela *Figura 1*. Começando pela tarefa de **leitura e preparação** (`rank 0`), fornece os parâmetros gerais da simulação e os dados iniciais das células às tarefas de atualização via `MPI_Bcast` e dsictribui a matriz usando `MPI_Scatterv`.
+
+Durante a simulação, a análise das dependências de dados revelou dois padrões distintos de comunicação ao longo de cada passo temporal $p$. 
+
+* **Comunicação Local (*Halo Exchange*):** A atualização de uma célula depende dos estados atuais de seus 8 vizinhos. Quando regiões são divididos em processos diferentes, os estados das células vizinhas precisam ser enviados antes de sua utilização. Na divisão por faixas de linhas usada na solução, essa troca envolve as linhas de fronteira entre faixas adjacentes.
+
+* **Comunicação Global:** Para garantir a simulação correta, ao final de cada passo $p$ ocorre **uma sincronização**, garantindo a completude do passo antes da troca dos estados atuais pelos próximos e os estados. Nesse momento ocorre a verificar de células em chamas (`pegando_fogo > 0`) e a atualização de (`ignicoes_passo`). O `MPI_Allreduce` foi usado para tratar isso.
+ 
+Ao encerrar a simulação, os estados e tempos de queima finais são enviados à tarefa de **finalização e saída** via `MPI_Gatherv`. A organização original das células é preservada para que o *checksum* seja calculado sequencialmente.
 
 ---
 
 ### 3. Aglomeração (*Agglomeration*)
-Manter cada célula como uma tarefa MPI isolada geraria um *overhead* proibitivo de latência de rede e memória. A aglomeração foi realizada em dois níveis hierárquicos:
 
-* **Nível Inter-nó (Aglomeração em Blocos Contíguos de Linhas para MPI):**
-  As $L$ linhas da matriz são aglomeradas em $P_{\text{MPI}}$ fatias horizontais contíguas na memória (padrão *row-major* do C). Cada processo recebe $\lfloor L / P_{\text{MPI}} \rfloor$ linhas, distribuindo o resto $L \bmod P_{\text{MPI}}$ aos primeiros processos (uma linha extra por processo até zerar o resto).
-  * *Vantagem:* Reduz a comunicação ponto a ponto a apenas **duas linhas inteiras** por processo a cada passo (*ghost rows* superior e inferior), enviadas em mensagens contíguas únicas (`MPI_Isend`/`MPI_Irecv`), eliminando empacotamento manual e maximizando o aproveitamento de cache.
-* **Nível Intra-nó (Aglomeração para OpenMP e Vetorização):**
-  Dentro de cada processo MPI, a fatia local (`local_L` linhas) é subdividida entre $T$ threads OpenMP em uma **região paralela persistente** (aberta uma única vez fora do laço temporal para evitar o custo de *fork/join* a cada passo). Além disso, as linhas internas da fatia local são computadas enquanto a comunicação não bloqueante (*halo exchange*) ocorre em segundo plano, sobrepondo computação e comunicação.
+Manter cada célula como uma tarefa MPI isolada geraria uma *overhead* de comunicação e gerenciamento. Para aumentar a granularidade, as tarefas são agrupadas em dois níveis: **entre processos MPI** e **entre threads OpenMP de um mesmo processo**.
+
+Sobre a **aglomeração em blocos contíguos de linhas para MPI:** as $L$ linhas da matriz são agrupadas em $P_{\text{MPI}}$ faixas horizontais contíguas na memória, sendo $P_{\text{MPI}}$ o número de processos iniciado pelo `mpirun`. Cada processo recebe $\lfloor L / P_{\text{MPI}} \rfloor$ linhas, e as linhas restantes são distribuídas, uma por processo, aos primeiros ranks. A *vantagem* é que agrupar células vizinhas no mesmo processo mantém suas consultas na memória local e limita a comunicação com outras faixas às linhas de fronteira superior e inferior. Os estados dessas linhas são trocados com `MPI_Sendrecv` e armazenados nas linhas extras locais (*ghost rows*).
+
+Já a **aglomeração dentro do processo para OpenMP e vetorização**, ocorre dentro de cada processo MPI, as tarefas das células da faixa local são divididas em grupos entre $T$ threads OpenMP, com escalonamento estático. A equipe é mantida em uma **região paralela persistente**, aberta fora do laço de passos, para evitar o custo de criação e encerramento das threads a cada passo. O laço utiliza também `simd` para permitir a vetorização das atualizações.
+
+As novas ignições e a presença de fogo são combinadas primeiro entre as threads de cada processo. Os dois resultados locais são agrupados em uma única redução MPI por passo, reduzindo a quantidade de operações coletivas. A thread principal realiza as chamadas MPI e a troca dos vetores, enquanto as demais aguardam essa etapa.
+
+A leitura, a preparação da floresta e a saída são agrupadas no processo de `rank 0`, que também recebe uma faixa da matriz e participa da simulação.
 
 ---
 
