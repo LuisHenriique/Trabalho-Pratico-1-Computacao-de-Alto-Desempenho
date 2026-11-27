@@ -195,8 +195,7 @@ int main(int argc, char *argv[])
     copia_array_local_ui(rank, elem_locais, sendcounts, displs, mapa.umidade, mapa_local.umidade);
 
     MPI_Scatterv(
-        rank == 0 ? mapa.ativacao : NULL,
-        sendcounts, displs, MPI_INT,
+        mapa.ativacao, sendcounts, displs, MPI_INT,
         mapa_local.ativacao, elem_locais, MPI_INT,
         0, MPI_COMM_WORLD
     );
@@ -209,12 +208,12 @@ int main(int argc, char *argv[])
     // Reúne os estados e tempos finais no processo 0
     MPI_Gatherv(
         &mapa_local.estado[mapa.C], elem_locais, MPI_UNSIGNED_CHAR,
-        rank == 0 ? mapa.estado : NULL, sendcounts, displs, MPI_UNSIGNED_CHAR,
+        mapa.estado, sendcounts, displs, MPI_UNSIGNED_CHAR,
         0, MPI_COMM_WORLD
     );
     MPI_Gatherv(
         mapa_local.tempo_atual, elem_locais, MPI_UNSIGNED_CHAR,
-        rank == 0 ? mapa.tempo_atual : NULL, sendcounts, displs, MPI_UNSIGNED_CHAR,
+        mapa.tempo_atual, sendcounts, displs, MPI_UNSIGNED_CHAR,
         0, MPI_COMM_WORLD
     );
 
@@ -283,15 +282,9 @@ void aloca_arrays_locais(int n_linhas_p, int C, Terreno *local_mapa)
 void copia_array_local_ui(int rank, int n_elementos, int *sendcounts, int *displs, unsigned char *array_global, unsigned char *array_local)
 {
     MPI_Scatterv(
-        rank == 0 ? array_global : NULL,
-        sendcounts,
-        displs,
-        MPI_UNSIGNED_CHAR,
-        array_local,
-        n_elementos,
-        MPI_UNSIGNED_CHAR,
-        0,
-        MPI_COMM_WORLD
+        array_global, sendcounts, displs, MPI_UNSIGNED_CHAR,
+        array_local, n_elementos, MPI_UNSIGNED_CHAR,
+        0, MPI_COMM_WORLD
     );
 }
 
