@@ -9,4 +9,4 @@ pico_ignicoes: 99 2381
 percentual_queimado: 2.57
 percentual_protegido: 1.31
 checksum: 14825089465781038537
-tempo: 5.831255
+tempo: 5.947379

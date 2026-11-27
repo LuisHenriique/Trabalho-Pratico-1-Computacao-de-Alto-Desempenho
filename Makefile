@@ -19,7 +19,7 @@ comp:
 		seq_tempo=$$(awk '/^tempo:/ {print $$2}' resultados/seq_$$carga.txt); \
 		echo "$$nome: Seq - $$seq_tempo s"; \
 		\
-		for core in 1 2 4 8; do \
+		for core in 1 2 4; do \
 			mpirun -np $$core ./fire_mpi_omp entradas/entrada_carga_$$carga.txt > resultados/mpi_$$carga.txt; \
 			mpi_tempo=$$(awk '/^tempo:/ {print $$2}' resultados/mpi_$$carga.txt); \
 		\
@@ -31,4 +31,6 @@ comp:
 		\
 			echo "Cores - $$core | MPI - $$mpi_tempo s | Sp - $$(echo "scale=2; $$seq_tempo / $$mpi_tempo" | bc) | $$resultado"; \
 		done; \
+		echo ""; \
+		echo "=-----------------------------------------------="; \
 	done
